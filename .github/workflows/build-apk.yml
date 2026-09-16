@@ -1,119 +1,53 @@
-name: Build APK
+name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
 
-      - name: Find and diagnose WwmAiAssistant.kt
-        shell: bash
-        run: |
-          set -e
+    - name: Extract Project ZIP if present
+      run: |
+        if [ -f "WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip" ]; then
+          echo "Extracting WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip..."
+          unzip -o WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip -d .
+        elif [ -f "WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip" ]; then
+          echo "Extracting WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip..."
+          unzip -o WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip -d .
+        fi
 
-          echo "=========================================="
-          echo " Searching for WwmAiAssistant.kt"
-          echo "=========================================="
+    - name: Grant execute permission for gradlew
+      run: |
+        if [ -f "./gradlew" ]; then
+          chmod +x ./gradlew
+        else
+          gradle wrapper
+          chmod +x ./gradlew
+        fi
 
-          FILE="$(find . -type f -name 'WwmAiAssistant.kt' -print -quit)"
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --stacktrace
 
-          if [ -z "$FILE" ]; then
-            echo "ERROR: WwmAiAssistant.kt was not found anywhere in the repository."
-            echo ""
-            echo "Searching for similar Kotlin files:"
-            find . -type f \( -name '*.kt' -o -name '*.java' \) | head -100
-            exit 1
-          fi
-
-          echo "FOUND:"
-          echo "$FILE"
-          echo ""
-
-          echo "=========================================="
-          echo " Lines 135-155"
-          echo "=========================================="
-
-          nl -ba "$FILE" | sed -n '135,155p'
-
-          echo ""
-          echo "=========================================="
-          echo " .text assignments"
-          echo "=========================================="
-
-          grep -nE '\.text[[:space:]]*=' "$FILE" || true
-
-          echo ""
-          echo "=========================================="
-          echo " Diagnostic completed"
-          echo "=========================================="
-
-      - name: Show project structure
-        shell: bash
-        run: |
-          echo "=========================================="
-          echo " Project structure"
-          echo "=========================================="
-
-          find . -maxdepth 3 -type f \
-            \( -name 'settings.gradle*' \
-            -o -name 'build.gradle*' \
-            -o -name 'gradlew' \) \
-            -print
-
-      - name: Build APK
-        shell: bash
-        run: |
-          echo "=========================================="
-          echo " Starting Gradle build"
-          echo "=========================================="
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --stacktrace
-          elif [ -f "./project/gradlew" ]; then
-            chmod +x ./project/gradlew
-            cd project
-            ./gradlew assembleDebug --stacktrace
-          elif [ -f "./build.gradle.kts" ]; then
-            gradle assembleDebug --stacktrace
-          elif [ -f "./project/build.gradle.kts" ]; then
-            cd project
-            gradle assembleDebug --stacktrace
-          else
-            echo "ERROR: Could not locate Gradle project."
-            echo ""
-            echo "Gradle files found:"
-            find . -type f \
-              \( -name 'settings.gradle' \
-              -o -name 'settings.gradle.kts' \
-              -o -name 'build.gradle' \
-              -o -name 'build.gradle.kts' \) \
-              -print
-            exit 1
-          fi
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: WWM-Arabic-Translator-Debug
-          path: |
-            **/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
