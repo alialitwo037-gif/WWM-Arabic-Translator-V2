@@ -2,6 +2,9 @@ name: Build APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -11,146 +14,68 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
 
-      - name: Verify ZIP
+      - name: Verify Java and project
         run: |
-          ZIP_FILE="WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip"
+          echo "=== Java version ==="
+          java -version
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found:"
-            echo "$ZIP_FILE"
+          echo "=== Project structure ==="
+          ls -la
+          echo ""
+          echo "=== project directory ==="
+          ls -la project || true
+
+      - name: Diagnose WwmAiAssistant.kt
+        run: |
+          FILE="project/app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt"
+
+          echo "=========================================="
+          echo " WwmAiAssistant.kt diagnostic"
+          echo "=========================================="
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: File not found:"
+            echo "$FILE"
             echo ""
-            echo "Repository contents:"
-            find . -maxdepth 2 -type f | sort
+            echo "Searching for WwmAiAssistant.kt..."
+            find . -name "WwmAiAssistant.kt" -type f -print
             exit 1
           fi
 
-          echo "ZIP found successfully:"
-          ls -lh "$ZIP_FILE"
+          echo "File found:"
+          echo "$FILE"
+          echo ""
 
-      - name: Extract Android project
-        run: |
-          rm -rf project
-          mkdir -p project
-
-          unzip -q "WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip" -d project
-
-          echo "ZIP extracted successfully."
-
-      - name: Verify Android project
-        run: |
-          echo "Checking project structure..."
-
-          test -f "project/settings.gradle.kts" || {
-            echo "ERROR: settings.gradle.kts not found."
-            exit 1
-          }
-
-          test -f "project/build.gradle.kts" || {
-            echo "ERROR: build.gradle.kts not found."
-            exit 1
-          }
-
-          test -d "project/app" || {
-            echo "ERROR: app directory not found."
-            exit 1
-          }
-
-          test -f "project/app/build.gradle.kts" || {
-            echo "ERROR: app/build.gradle.kts not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/AndroidManifest.xml" || {
-            echo "ERROR: AndroidManifest.xml not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/java/com/wwm/arabictranslator/MainActivity.kt" || {
-            echo "ERROR: MainActivity.kt not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt" || {
-            echo "ERROR: WwmAiAssistant.kt not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/java/com/wwm/arabictranslator/TranslatorSettings.kt" || {
-            echo "ERROR: TranslatorSettings.kt not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/java/com/wwm/arabictranslator/Glossary.kt" || {
-            echo "ERROR: Glossary.kt not found."
-            exit 1
-          }
-
-          test -f "project/app/src/main/java/com/wwm/arabictranslator/TranslationMemory.kt" || {
-            echo "ERROR: TranslationMemory.kt not found."
-            exit 1
-          }
-
-          echo "Android project structure is correct."
-
-      - name: Verify Gradle configuration
-        run: |
-          cd project
-
-          echo "Gradle files:"
-          ls -lh
+          echo "=== Lines 135-155 ==="
+          nl -ba "$FILE" | sed -n '135,155p'
 
           echo ""
-          echo "App Gradle file:"
-          ls -lh app/build.gradle.kts
+          echo "=== All .text assignments in this file ==="
+          grep -nE '\.text[[:space:]]*=' "$FILE" || true
 
           echo ""
-          echo "Gradle configuration verified."
+          echo "=== End diagnostic ==="
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd project
 
           echo "Starting Gradle build..."
-
           gradle assembleDebug --stacktrace
 
-      - name: Verify APK
-        run: |
-          APK="project/app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            echo ""
-            echo "Searching for APK files:"
-            find project -type f -name "*.apk" -print
-            exit 1
-          fi
-
-          echo "APK generated successfully:"
-          ls -lh "$APK"
-
-          mkdir -p artifact
-
-          cp "$APK" "artifact/WWM-Arabic-Translator-debug.apk"
-
-          echo ""
-          echo "Final artifact:"
-          ls -lh "artifact/WWM-Arabic-Translator-debug.apk"
-
-      - name: Upload Debug APK
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: WWM-Arabic-Translator-debug
-          path: artifact/WWM-Arabic-Translator-debug.apk
+          name: WWM-Arabic-Translator-Debug
+          path: project/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
