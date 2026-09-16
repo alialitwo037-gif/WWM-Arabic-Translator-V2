@@ -32,6 +32,34 @@ jobs:
         run: |
           find project -maxdepth 5 -type f | sort
 
+      - name: Configure JVM 17
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("project/app/build.gradle.kts")
+          s = p.read_text()
+
+          marker = "    dependencies {"
+
+          addition = """    compileOptions {
+              sourceCompatibility = JavaVersion.VERSION_17
+              targetCompatibility = JavaVersion.VERSION_17
+          }
+
+          kotlinOptions {
+              jvmTarget = "17"
+          }
+
+          """
+
+          if marker not in s:
+              raise SystemExit("dependencies block not found")
+
+          s = s.replace(marker, addition + marker, 1)
+          p.write_text(s)
+          PY
+
       - name: Build Debug APK
         working-directory: project
         run: gradle assembleDebug --stacktrace
