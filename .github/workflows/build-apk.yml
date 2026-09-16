@@ -1,0 +1,43 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Extract Android project
+        run: |
+          rm -rf project
+          mkdir -p project
+          unzip -q WWM_Arabic_Translator_V1_4_5x_Audited_GitHubReady.zip -d project
+
+      - name: Show project structure
+        run: |
+          find project -maxdepth 5 -type f | sort
+
+      - name: Build Debug APK
+        working-directory: project
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WWM-Arabic-Translator-debug
+          path: project/app/build/outputs/apk/debug/app-debug.apk
