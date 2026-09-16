@@ -12,216 +12,384 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # =========================================================
+      # 1) Checkout
+      # =========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # =========================================================
+      # 2) JDK 17
+      # =========================================================
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+
+      # =========================================================
+      # 3) Gradle
+      # =========================================================
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract Project ZIP if present
+
+      # =========================================================
+      # 4) Extract project ZIP if it exists
+      # =========================================================
+      - name: Extract Android Project
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           echo "=========================================="
-          echo "Preparing Android project"
+          echo "Searching for project ZIP"
           echo "=========================================="
+
+          ZIP_FILE=""
 
           if [ -f "WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip" ]; then
-            echo "Found: WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip"
-            unzip -o "WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip" -d .
+            ZIP_FILE="WWM_Arabic_Translator_V1_4_FINAL_FIXED_JVM17.zip"
           elif [ -f "WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip" ]; then
-            echo "Found: WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip"
-            unzip -o "WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip" -d .
-          else
-            echo "No known project ZIP found."
-            echo "Continuing with repository contents..."
+            ZIP_FILE="WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip"
           fi
 
-      - name: Locate Android project
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Project ZIP found:"
+            echo "$ZIP_FILE"
+            echo ""
+
+            unzip -o "$ZIP_FILE" -d .
+          else
+            echo "No supported project ZIP found."
+            echo "Using repository contents directly."
+          fi
+
+
+      # =========================================================
+      # 5) Locate Gradle project
+      # =========================================================
+      - name: Locate Gradle Project
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           echo "=========================================="
-          echo "Locating Gradle Android project"
+          echo "Locating gradlew"
           echo "=========================================="
 
           GRADLEW="$(find . -type f -name "gradlew" -print -quit)"
 
-          if [ -n "$GRADLEW" ]; then
-            echo "Gradle wrapper found:"
-            echo "$GRADLEW"
-
-            PROJECT_DIR="$(dirname "$GRADLEW")"
-            echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-            chmod +x "$GRADLEW"
-            exit 0
-          fi
-
-          SETTINGS="$(find . -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print -quit)"
-
-          if [ -n "$SETTINGS" ]; then
-            PROJECT_DIR="$(dirname "$SETTINGS")"
-            echo "Gradle settings found:"
-            echo "$SETTINGS"
-            echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          echo "ERROR: No Gradle Android project was found."
-          echo ""
-          echo "Available Gradle files:"
-          find . -type f \
-            \( -name "settings.gradle" \
-            -o -name "settings.gradle.kts" \
-            -o -name "build.gradle" \
-            -o -name "build.gradle.kts" \
-            -o -name "gradlew" \) \
-            -print
-
-          exit 1
-
-      - name: Fix WwmAiAssistant Kotlin text assignments
-        shell: bash
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "Checking WwmAiAssistant.kt"
-          echo "=========================================="
-
-          FILE="$(find "$PROJECT_DIR" -type f -name "WwmAiAssistant.kt" -print -quit)"
-
-          if [ -z "$FILE" ]; then
-            echo "WwmAiAssistant.kt was not found."
-            echo "Searching entire repository..."
-            FILE="$(find . -type f -name "WwmAiAssistant.kt" -print -quit)"
-          fi
-
-          if [ -z "$FILE" ]; then
-            echo "ERROR: WwmAiAssistant.kt does not exist."
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: gradlew was not found."
             echo ""
-            echo "Kotlin files found:"
-            find "$PROJECT_DIR" -type f -name "*.kt" -print | sort
+            echo "Detected Gradle files:"
+            find . -type f \
+              \( \
+                -name "settings.gradle" \
+                -o -name "settings.gradle.kts" \
+                -o -name "build.gradle" \
+                -o -name "build.gradle.kts" \
+              \) \
+              -print
             exit 1
           fi
 
+          PROJECT_DIR="$(dirname "$GRADLEW")"
+
+          chmod +x "$GRADLEW"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo ""
+          echo "Gradle project:"
+          echo "$PROJECT_DIR"
+
+
+      # =========================================================
+      # 6) Locate WwmAiAssistant.kt
+      # =========================================================
+      - name: Locate WwmAiAssistant.kt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "Locating WwmAiAssistant.kt"
+          echo "=========================================="
+
+          FILE="$(find "$PROJECT_DIR" \
+            -type f \
+            -name "WwmAiAssistant.kt" \
+            -print -quit)"
+
+          if [ -z "$FILE" ]; then
+            echo "ERROR: WwmAiAssistant.kt was not found."
+            exit 1
+          fi
+
+          echo "WWM_AI_FILE=$FILE" >> "$GITHUB_ENV"
+
+          echo ""
           echo "Found:"
           echo "$FILE"
-          echo ""
 
-          cp "$FILE" "$FILE.backup"
 
-          python3 - "$FILE" <<'PY'
-          import re
+      # =========================================================
+      # 7) Backup before modification
+      # =========================================================
+      - name: Backup Kotlin Source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp "$WWM_AI_FILE" "$WWM_AI_FILE.original"
+
+          echo "Original source backup created."
+
+
+      # =========================================================
+      # 8) Apply exact fix
+      #
+      # Problem:
+      #     EditText.text = String
+      #
+      # Error:
+      #     String cannot be assigned to Editable
+      #
+      # Correct form:
+      #     EditText.setText(String)
+      #
+      # ONLY lines 144 and 149 are changed.
+      # =========================================================
+      - name: Fix WwmAiAssistant Kotlin Error
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - "$WWM_AI_FILE" <<'PY'
           import sys
 
           path = sys.argv[1]
 
-          with open(path, "r", encoding="utf-8") as f:
-              text = f.read()
+          with open(path, "r", encoding="utf-8", newline="") as f:
+              lines = f.readlines()
 
-          original = text
+          targets = [144, 149]
 
-          # Convert simple Android TextView/EditText .text assignments
-          # into setText(...) calls.
-          #
-          # Example:
-          #   editText.text = value
-          #
-          # becomes:
-          #   editText.setText(value)
-          #
-          # This specifically addresses Kotlin's String?/Editable mismatch.
+          for number in targets:
+              index = number - 1
 
-          pattern = re.compile(
-              r'(?m)^(\s*)([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.text\s*=\s*([^\n]+)$'
-          )
+              if index < 0 or index >= len(lines):
+                  raise SystemExit(
+                      f"ERROR: {path} does not contain line {number}."
+                  )
 
-          def replace(match):
-              indent = match.group(1)
-              receiver = match.group(2)
-              value = match.group(3)
+              original = lines[index]
 
-              # Avoid changing an already-correct setText call.
-              return f"{indent}{receiver}.setText({value})"
+              # Remove only the line ending for analysis.
+              body = original.rstrip("\r\n")
 
-          text = pattern.sub(replace, text)
+              print()
+              print(f"Checking line {number}:")
+              print(body)
 
-          if text != original:
-              with open(path, "w", encoding="utf-8") as f:
-                  f.write(text)
-              print("WwmAiAssistant.kt was updated.")
-          else:
-              print("No direct .text assignment was found.")
+              # Already fixed: do nothing.
+              if ".setText(" in body:
+                  print(f"Line {number} is already fixed.")
+                  continue
+
+              text_pos = body.find(".text")
+
+              if text_pos == -1:
+                  raise SystemExit(
+                      f"ERROR: Expected '.text' on line {number}, "
+                      f"but it was not found.\n"
+                      f"Actual line:\n{body}"
+                  )
+
+              equals_pos = body.find("=", text_pos + len(".text"))
+
+              if equals_pos == -1:
+                  raise SystemExit(
+                      f"ERROR: Expected '=' after '.text' on line {number}.\n"
+                      f"Actual line:\n{body}"
+                  )
+
+              lhs = body[:text_pos]
+              rhs = body[equals_pos + 1:].strip()
+
+              if not rhs:
+                  raise SystemExit(
+                      f"ERROR: Empty right-hand side on line {number}."
+                  )
+
+              # Preserve a trailing semicolon.
+              semicolon = ""
+              if rhs.endswith(";"):
+                  rhs = rhs[:-1].rstrip()
+                  semicolon = ";"
+
+              # Example:
+              #
+              #     editText.text = value
+              #
+              # becomes:
+              #
+              #     editText.setText(value)
+              #
+              fixed = (
+                  lhs
+                  + ".setText("
+                  + rhs
+                  + ")"
+                  + semicolon
+              )
+
+              # Preserve original newline style.
+              newline = "\n"
+              if original.endswith("\r\n"):
+                  newline = "\r\n"
+
+              lines[index] = fixed + newline
+
+              print(f"Fixed line {number}:")
+              print(lines[index].rstrip("\r\n"))
+
+          with open(path, "w", encoding="utf-8", newline="") as f:
+              f.writelines(lines)
+
+          print()
+          print("==========================================")
+          print("Kotlin fix completed successfully.")
+          print("==========================================")
           PY
 
-          echo ""
-          echo "=========================================="
-          echo "Relevant .text assignments after fix"
-          echo "=========================================="
 
-          grep -nE '\.text[[:space:]]*=' "$FILE" || true
-
-          echo ""
-          echo "=========================================="
-          echo "Lines around previous errors"
-          echo "=========================================="
-
-          nl -ba "$FILE" | sed -n '135,155p'
-
-      - name: Validate Gradle wrapper
+      # =========================================================
+      # 9) Verify exact modified lines
+      # =========================================================
+      - name: Verify Kotlin Fix
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          if [ -f "$PROJECT_DIR/gradlew" ]; then
-            chmod +x "$PROJECT_DIR/gradlew"
-            echo "Using project Gradle wrapper."
-          else
-            echo "Gradle wrapper not found."
-            echo "Generating wrapper..."
-            cd "$PROJECT_DIR"
-            gradle wrapper
-            chmod +x ./gradlew
+          echo "=========================================="
+          echo "Verifying modified source"
+          echo "=========================================="
+
+          echo ""
+          echo "Context:"
+          nl -ba "$WWM_AI_FILE" | sed -n '138,153p'
+
+          echo ""
+          echo "Checking line 144..."
+          LINE144="$(sed -n '144p' "$WWM_AI_FILE")"
+
+          if [[ "$LINE144" != *".setText("* ]]; then
+            echo "ERROR: Line 144 is not using setText()."
+            echo "$LINE144"
+            exit 1
           fi
 
+          echo "Line 144: OK"
+
+          echo ""
+          echo "Checking line 149..."
+          LINE149="$(sed -n '149p' "$WWM_AI_FILE")"
+
+          if [[ "$LINE149" != *".setText("* ]]; then
+            echo "ERROR: Line 149 is not using setText()."
+            echo "$LINE149"
+            exit 1
+          fi
+
+          echo "Line 149: OK"
+
+          echo ""
+          echo "Exact compiler-error locations have been fixed."
+
+
+      # =========================================================
+      # 10) Clean
+      # =========================================================
+      - name: Clean Project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd "$PROJECT_DIR"
+
+          ./gradlew clean --stacktrace
+
+
+      # =========================================================
+      # 11) Build APK
+      # =========================================================
       - name: Build Debug APK
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           cd "$PROJECT_DIR"
 
           echo "=========================================="
-          echo "Starting Gradle build"
+          echo "Starting Gradle Debug APK build"
           echo "=========================================="
 
           ./gradlew assembleDebug --stacktrace
 
-      - name: Find generated APK
+
+      # =========================================================
+      # 12) Verify APK exists
+      # =========================================================
+      - name: Verify APK
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           echo "=========================================="
           echo "Searching for generated APK"
           echo "=========================================="
 
-          find "$PROJECT_DIR" -type f -path "*/build/outputs/apk/debug/*.apk" -print
+          APK="$(find "$PROJECT_DIR" \
+            -type f \
+            -path "*/build/outputs/apk/debug/*.apk" \
+            -print -quit)"
 
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+
+            echo ""
+            echo "All APK files found:"
+            find "$PROJECT_DIR" \
+              -type f \
+              -name "*.apk" \
+              -print || true
+
+            exit 1
+          fi
+
+          echo ""
+          echo "APK generated successfully:"
+          echo "$APK"
+
+          echo ""
+          echo "APK information:"
+          ls -lh "$APK"
+
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+
+
+      # =========================================================
+      # 13) Upload APK artifact
+      # =========================================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: |
-            **/build/outputs/apk/debug/*.apk
+          name: WWM-Arabic-Translator-Debug
+          path: ${{ env.APK_PATH }}
           if-no-files-found: error
