@@ -17,254 +17,140 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Gradle 8.10.2
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
+      - name: Verify ZIP
+        run: |
+          ZIP_FILE="WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: ZIP file not found:"
+            echo "$ZIP_FILE"
+            echo ""
+            echo "Repository contents:"
+            find . -maxdepth 2 -type f | sort
+            exit 1
+          fi
+
+          echo "ZIP found successfully:"
+          ls -lh "$ZIP_FILE"
 
       - name: Extract Android project
         run: |
           rm -rf project
           mkdir -p project
-          unzip -q WWM_Arabic_Translator_V1_4_5x_Audited_GitHubReady.zip -d project
 
-      - name: Configure JVM 17
+          unzip -q "WWM_Arabic_Translator_V1_4_FINAL_FIXED.zip" -d project
+
+          echo "ZIP extracted successfully."
+
+      - name: Verify Android project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          echo "Checking project structure..."
 
-          p = Path("project/app/build.gradle.kts")
-          s = p.read_text()
-
-          if "compileOptions" not in s:
-              s = s.replace(
-                  "android {",
-                  """android {
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-
-          """,
-                  1
-              )
-
-          p.write_text(s)
-          PY
-
-      - name: Fix WwmAiAssistant.kt
-        run: |
-          cat > project/app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt <<'EOF'
-          package com.wwm.arabictranslator
-
-          import android.content.Context
-          import android.text.InputType
-          import android.widget.EditText
-          import android.widget.LinearLayout
-          import android.widget.Toast
-          import androidx.appcompat.app.AlertDialog
-          import org.json.JSONArray
-          import org.json.JSONObject
-          import java.io.OutputStreamWriter
-          import java.net.HttpURLConnection
-          import java.net.URL
-          import kotlin.concurrent.thread
-
-          class WwmAiAssistant(private val context: Context) {
-
-              private val settings = TranslatorSettings(context)
-
-              fun testConnection(onResult: (Boolean, String) -> Unit) {
-                  val apiKey = settings.geminiApiKey
-                  if (apiKey.isBlank()) {
-                      onResult(false, "مفتاح API غير مدخل.")
-                      return
-                  }
-
-                  thread {
-                      try {
-                          val model = settings.geminiModel.ifBlank { "gemini-2.5-flash" }
-                          val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey")
-                          val conn = url.openConnection() as HttpURLConnection
-                          conn.requestMethod = "POST"
-                          conn.setRequestProperty("Content-Type", "application/json")
-                          conn.doOutput = true
-                          conn.connectTimeout = 8000
-                          conn.readTimeout = 8000
-
-                          val payload = JSONObject().apply {
-                              put("contents", JSONArray().apply {
-                                  put(JSONObject().apply {
-                                      put("parts", JSONArray().apply {
-                                          put(JSONObject().apply {
-                                              put("text", "Hello")
-                                          })
-                                      })
-                                  })
-                              })
-                          }
-
-                          OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-
-                          val code = conn.responseCode
-                          if (code == 200) {
-                              onResult(true, "الاتصال ناجح مع النموذج: $model")
-                          } else {
-                              val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                              onResult(false, "فشل الاتصال (كود $code): $err")
-                          }
-                      } catch (e: Exception) {
-                          onResult(false, "حدث خطأ أثناء الاتصال: ${e.localizedMessage}")
-                      }
-                  }
-              }
-
-              fun showApiKeyDialog(onSaved: () -> Unit) {
-                  val layout = LinearLayout(context).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setPadding(40, 20, 40, 20)
-                  }
-
-                  val inputKey = EditText(context).apply {
-                      hint = "أدخل Gemini API Key"
-                      inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                      setText(settings.geminiApiKey)
-                  }
-
-                  val inputModel = EditText(context).apply {
-                      hint = "اسم النموذج (مثال: gemini-2.5-flash)"
-                      setText(settings.geminiModel)
-                  }
-
-                  layout.addView(inputKey)
-                  layout.addView(inputModel)
-
-                  AlertDialog.Builder(context)
-                      .setTitle("إعدادات الذكاء الاصطناعي (Gemini)")
-                      .setView(layout)
-                      .setPositiveButton("حفظ") { _, _ ->
-                          val key = inputKey.text.toString().trim()
-                          val model = inputModel.text.toString().trim()
-                          settings.geminiApiKey = key
-                          settings.geminiModel = if (model.isBlank()) "gemini-2.5-flash" else model
-                          Toast.makeText(context, "تم حفظ إعدادات الذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
-                          onSaved()
-                      }
-                      .setNegativeButton("إلغاء", null)
-                      .show()
-              }
-
-              fun translateWithGemini(
-                  sourceText: String,
-                  glossary: Glossary,
-                  memory: TranslationMemory,
-                  onResult: (String) -> Unit
-              ) {
-                  val cached = memory.get(sourceText)
-                  if (!cached.isNullOrEmpty()) {
-                      onResult(cached)
-                      return
-                  }
-
-                  val apiKey = settings.geminiApiKey
-                  if (apiKey.isBlank()) {
-                      onResult(sourceText)
-                      return
-                  }
-
-                  thread {
-                      try {
-                          val terms = glossary.findMatchingTerms(sourceText)
-                          val glossaryContext = if (terms.isNotEmpty()) {
-                              "Glossary terms to respect:\n" +
-                                  terms.entries.joinToString("\n") { "${it.key} = ${it.value}" } +
-                                  "\n\n"
-                          } else ""
-
-                          val systemPrompt = settings.systemPrompt.ifBlank {
-                              "You are a translator for games (Wuxia RPG style). Translate into natural Arabic."
-                          }
-
-                          val prompt =
-                              glossaryContext +
-                                  "Translate this text accurately into Arabic without extra comments:\n$sourceText"
-
-                          val model = settings.geminiModel.ifBlank { "gemini-2.5-flash" }
-                          val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey")
-                          val conn = url.openConnection() as HttpURLConnection
-                          conn.requestMethod = "POST"
-                          conn.setRequestProperty("Content-Type", "application/json")
-                          conn.doOutput = true
-                          conn.connectTimeout = 10000
-                          conn.readTimeout = 10000
-
-                          val payload = JSONObject().apply {
-                              put("system_instruction", JSONObject().apply {
-                                  put("parts", JSONArray().apply {
-                                      put(JSONObject().apply {
-                                          put("text", systemPrompt)
-                                      })
-                                  })
-                              })
-
-                              put("contents", JSONArray().apply {
-                                  put(JSONObject().apply {
-                                      put("parts", JSONArray().apply {
-                                          put(JSONObject().apply {
-                                              put("text", prompt)
-                                          })
-                                      })
-                                  })
-                              })
-                          }
-
-                          OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-
-                          if (conn.responseCode == 200) {
-                              val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                              val json = JSONObject(responseText)
-
-                              val translated = json
-                                  .getJSONArray("candidates")
-                                  .getJSONObject(0)
-                                  .getJSONObject("content")
-                                  .getJSONArray("parts")
-                                  .getJSONObject(0)
-                                  .getString("text")
-                                  .trim()
-
-                              if (translated.isNotBlank()) {
-                                  memory.put(sourceText, translated)
-                                  onResult(translated)
-                              } else {
-                                  onResult(sourceText)
-                              }
-                          } else {
-                              onResult(sourceText)
-                          }
-                      } catch (e: Exception) {
-                          onResult(sourceText)
-                      }
-                  }
-              }
-
-              private fun String?.isNull_or_Empty(): Boolean {
-                  return this == null || this.trim().isEmpty()
-              }
+          test -f "project/settings.gradle.kts" || {
+            echo "ERROR: settings.gradle.kts not found."
+            exit 1
           }
-          EOF
+
+          test -f "project/build.gradle.kts" || {
+            echo "ERROR: build.gradle.kts not found."
+            exit 1
+          }
+
+          test -d "project/app" || {
+            echo "ERROR: app directory not found."
+            exit 1
+          }
+
+          test -f "project/app/build.gradle.kts" || {
+            echo "ERROR: app/build.gradle.kts not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/AndroidManifest.xml" || {
+            echo "ERROR: AndroidManifest.xml not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/java/com/wwm/arabictranslator/MainActivity.kt" || {
+            echo "ERROR: MainActivity.kt not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt" || {
+            echo "ERROR: WwmAiAssistant.kt not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/java/com/wwm/arabictranslator/TranslatorSettings.kt" || {
+            echo "ERROR: TranslatorSettings.kt not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/java/com/wwm/arabictranslator/Glossary.kt" || {
+            echo "ERROR: Glossary.kt not found."
+            exit 1
+          }
+
+          test -f "project/app/src/main/java/com/wwm/arabictranslator/TranslationMemory.kt" || {
+            echo "ERROR: TranslationMemory.kt not found."
+            exit 1
+          }
+
+          echo "Android project structure is correct."
+
+      - name: Verify Gradle configuration
+        run: |
+          cd project
+
+          echo "Gradle files:"
+          ls -lh
+
+          echo ""
+          echo "App Gradle file:"
+          ls -lh app/build.gradle.kts
+
+          echo ""
+          echo "Gradle configuration verified."
 
       - name: Build Debug APK
-        working-directory: project
-        run: gradle assembleDebug --stacktrace
+        run: |
+          cd project
+
+          echo "Starting Gradle build..."
+
+          gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        run: |
+          APK="project/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            echo ""
+            echo "Searching for APK files:"
+            find project -type f -name "*.apk" -print
+            exit 1
+          fi
+
+          echo "APK generated successfully:"
+          ls -lh "$APK"
+
+          mkdir -p artifact
+
+          cp "$APK" "artifact/WWM-Arabic-Translator-debug.apk"
+
+          echo ""
+          echo "Final artifact:"
+          ls -lh "artifact/WWM-Arabic-Translator-debug.apk"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: WWM-Arabic-Translator-debug
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          path: artifact/WWM-Arabic-Translator-debug.apk
+          if-no-files-found: error
