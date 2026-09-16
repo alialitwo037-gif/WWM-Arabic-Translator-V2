@@ -23,59 +23,97 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Verify Java and project
+      - name: Find and diagnose WwmAiAssistant.kt
+        shell: bash
         run: |
-          echo "=== Java version ==="
-          java -version
-
-          echo "=== Project structure ==="
-          ls -la
-          echo ""
-          echo "=== project directory ==="
-          ls -la project || true
-
-      - name: Diagnose WwmAiAssistant.kt
-        run: |
-          FILE="project/app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt"
+          set -e
 
           echo "=========================================="
-          echo " WwmAiAssistant.kt diagnostic"
+          echo " Searching for WwmAiAssistant.kt"
           echo "=========================================="
 
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: File not found:"
-            echo "$FILE"
+          FILE="$(find . -type f -name 'WwmAiAssistant.kt' -print -quit)"
+
+          if [ -z "$FILE" ]; then
+            echo "ERROR: WwmAiAssistant.kt was not found anywhere in the repository."
             echo ""
-            echo "Searching for WwmAiAssistant.kt..."
-            find . -name "WwmAiAssistant.kt" -type f -print
+            echo "Searching for similar Kotlin files:"
+            find . -type f \( -name '*.kt' -o -name '*.java' \) | head -100
             exit 1
           fi
 
-          echo "File found:"
+          echo "FOUND:"
           echo "$FILE"
           echo ""
 
-          echo "=== Lines 135-155 ==="
+          echo "=========================================="
+          echo " Lines 135-155"
+          echo "=========================================="
+
           nl -ba "$FILE" | sed -n '135,155p'
 
           echo ""
-          echo "=== All .text assignments in this file ==="
+          echo "=========================================="
+          echo " .text assignments"
+          echo "=========================================="
+
           grep -nE '\.text[[:space:]]*=' "$FILE" || true
 
           echo ""
-          echo "=== End diagnostic ==="
+          echo "=========================================="
+          echo " Diagnostic completed"
+          echo "=========================================="
+
+      - name: Show project structure
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo " Project structure"
+          echo "=========================================="
+
+          find . -maxdepth 3 -type f \
+            \( -name 'settings.gradle*' \
+            -o -name 'build.gradle*' \
+            -o -name 'gradlew' \) \
+            -print
 
       - name: Build APK
+        shell: bash
         run: |
-          cd project
+          echo "=========================================="
+          echo " Starting Gradle build"
+          echo "=========================================="
 
-          echo "Starting Gradle build..."
-          gradle assembleDebug --stacktrace
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          elif [ -f "./project/gradlew" ]; then
+            chmod +x ./project/gradlew
+            cd project
+            ./gradlew assembleDebug --stacktrace
+          elif [ -f "./build.gradle.kts" ]; then
+            gradle assembleDebug --stacktrace
+          elif [ -f "./project/build.gradle.kts" ]; then
+            cd project
+            gradle assembleDebug --stacktrace
+          else
+            echo "ERROR: Could not locate Gradle project."
+            echo ""
+            echo "Gradle files found:"
+            find . -type f \
+              \( -name 'settings.gradle' \
+              -o -name 'settings.gradle.kts' \
+              -o -name 'build.gradle' \
+              -o -name 'build.gradle.kts' \) \
+              -print
+            exit 1
+          fi
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: WWM-Arabic-Translator-Debug
-          path: project/app/build/outputs/apk/debug/*.apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
           if-no-files-found: error
