@@ -28,10 +28,6 @@ jobs:
           mkdir -p project
           unzip -q WWM_Arabic_Translator_V1_4_5x_Audited_GitHubReady.zip -d project
 
-      - name: Show project structure
-        run: |
-          find project -maxdepth 5 -type f | sort
-
       - name: Configure JVM 17
         run: |
           python3 - <<'PY'
@@ -40,23 +36,29 @@ jobs:
           p = Path("project/app/build.gradle.kts")
           s = p.read_text()
 
-          marker = "    dependencies {"
-
-          addition = """    compileOptions {
-              sourceCompatibility = JavaVersion.VERSION_17
-              targetCompatibility = JavaVersion.VERSION_17
-          }
-
-          kotlinOptions {
-              jvmTarget = "17"
-          }
-
+          old = """android {
+              namespace = "com.wwm.arabictranslator"
+              compileSdk = 35
           """
 
-          if marker not in s:
-              raise SystemExit("dependencies block not found")
+          new = """android {
+              namespace = "com.wwm.arabictranslator"
+              compileSdk = 35
 
-          s = s.replace(marker, addition + marker, 1)
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          """
+
+          if old not in s:
+              raise SystemExit("Expected android block was not found")
+
+          s = s.replace(old, new, 1)
           p.write_text(s)
           PY
 
