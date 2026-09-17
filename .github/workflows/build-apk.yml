@@ -1,1 +1,113 @@
+name: Build WWM Arabic Translator APK
 
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Validate project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_files=(
+            "settings.gradle.kts"
+            "build.gradle.kts"
+            "app/build.gradle.kts"
+            "gradle.properties"
+            "app/src/main/AndroidManifest.xml"
+            "app/src/main/java/com/wwm/arabictranslator/MainActivity.kt"
+            "app/src/main/java/com/wwm/arabictranslator/ScreenTranslateService.kt"
+            "app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt"
+            "app/src/main/java/com/wwm/arabictranslator/TranslationMemory.kt"
+            "app/src/main/java/com/wwm/arabictranslator/Glossary.kt"
+            "app/src/main/java/com/wwm/arabictranslator/TranslatorSettings.kt"
+            "app/src/main/res/values/styles.xml"
+            "app/src/main/res/values/strings.xml"
+          )
+
+          for f in "${required_files[@]}"; do
+            test -f "$f" || {
+              echo "ERROR: missing required file: $f"
+              exit 1
+            }
+          done
+
+          grep -Fq 'id("com.android.application") version "8.7.3" apply false' build.gradle.kts
+          grep -Fq 'id("org.jetbrains.kotlin.android") version "2.0.21" apply false' build.gradle.kts
+
+          grep -Fq 'compileSdk = 35' app/build.gradle.kts
+          grep -Fq 'targetSdk = 35' app/build.gradle.kts
+          grep -Fq 'com.google.mlkit:text-recognition:16.0.1' app/build.gradle.kts
+          grep -Fq 'com.google.mlkit:translate:17.0.3' app/build.gradle.kts
+
+          grep -Fq 'setText(prefs.getString("endpoint", "") ?: "")' \
+            app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt
+
+          grep -Fq 'setText(prefs.getString("api_key", "") ?: "")' \
+            app/src/main/java/com/wwm/arabictranslator/WwmAiAssistant.kt
+
+          grep -Fq 'import com.google.mlkit.nl.translate.*' \
+            app/src/main/java/com/wwm/arabictranslator/ScreenTranslateService.kt
+
+          grep -Fq 'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION' \
+            app/src/main/AndroidManifest.xml
+
+          grep -Fq 'android:foregroundServiceType="mediaProjection"' \
+            app/src/main/AndroidManifest.xml
+
+          test ! -f gradlew || {
+            echo "ERROR: unexpected Gradle wrapper found."
+            exit 1
+          }
+
+          echo "Project validation passed."
+
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace --warning-mode all :app:assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+
+          test -s "$apk"
+
+          echo "APK created successfully:"
+          ls -lh "$apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WWM-Arabic-Translator-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
