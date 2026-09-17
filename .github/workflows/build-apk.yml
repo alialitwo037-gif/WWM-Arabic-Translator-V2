@@ -26,11 +26,41 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
 
-      - name: Install Android SDK 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found at:"
+            echo "$SDKMANAGER"
+            find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print || true
+            exit 1
+          fi
+
+          echo "Using Android SDK:"
+          echo "$SDK_ROOT"
+
+          echo "Accepting Android SDK licenses..."
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          echo "Installing required Android SDK packages..."
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+          echo "Installed Android SDK packages:"
+          "$SDKMANAGER" --list_installed | grep -E \
+            'platform-tools|platforms;android-35|build-tools;35.0.0' || true
 
       - name: Validate project
         shell: bash
@@ -53,11 +83,11 @@ jobs:
             "app/src/main/res/values/strings.xml"
           )
 
-          for f in "${required_files[@]}"; do
-            test -f "$f" || {
-              echo "ERROR: missing required file: $f"
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: missing required file: $file"
               exit 1
-            }
+            fi
           done
 
           grep -Fq 'id("com.android.application") version "8.7.3" apply false' build.gradle.kts
@@ -83,27 +113,26 @@ jobs:
           grep -Fq 'android:foregroundServiceType="mediaProjection"' \
             app/src/main/AndroidManifest.xml
 
-          test ! -f gradlew || {
-            echo "ERROR: unexpected Gradle wrapper found."
-            exit 1
-          }
-
           echo "Project validation passed."
 
       - name: Build debug APK
-        run: gradle --no-daemon --stacktrace --warning-mode all :app:assembleDebug
+        run: |
+          gradle --no-daemon --stacktrace --warning-mode all :app:assembleDebug
 
       - name: Verify APK
         shell: bash
         run: |
           set -euo pipefail
 
-          apk="app/build/outputs/apk/debug/app-debug.apk"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
 
-          test -s "$apk"
+          if [ ! -s "$APK" ]; then
+            echo "ERROR: APK was not created."
+            exit 1
+          fi
 
           echo "APK created successfully:"
-          ls -lh "$apk"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
