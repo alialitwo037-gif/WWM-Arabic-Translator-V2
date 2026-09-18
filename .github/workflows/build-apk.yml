@@ -24,20 +24,13 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Fix Manifest Path Automatically
+    - name: Fix Duplicate src Path
       run: |
-        # التأكد من وجود المجلد المطلوب
-        mkdir -p app/src/main
-        
-        # البحث عن ملف AndroidManifest.xml ونقله للمسار الصحيح إذا لم يكن موجوداً فيه
-        if [ ! -f "app/src/main/AndroidManifest.xml" ]; then
-          FOUND_MANIFEST=$(find . -maxdepth 4 -name "AndroidManifest.xml" | head -n 1)
-          if [ -n "$FOUND_MANIFEST" ]; then
-            echo "Moving $FOUND_MANIFEST to app/src/main/AndroidManifest.xml"
-            cp "$FOUND_MANIFEST" app/src/main/AndroidManifest.xml
-          else
-            echo "AndroidManifest.xml not found anywhere!"
-          fi
+        # تصحيح مسار المجلد المكرر src/src إلى src مباشرة
+        if [ -d "app/src/src/main" ]; then
+          echo "Fixing nested src folder..."
+          cp -r app/src/src/* app/src/
+          rm -rf app/src/src
         fi
 
     - name: Grant execute permission for gradlew
