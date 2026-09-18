@@ -33,10 +33,11 @@ jobs:
           chmod +x ./gradlew
         fi
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+    - name: Build Debug APK with Full Diagnostics
+      run: ./gradlew assembleDebug --continue --stacktrace
 
     - name: Upload Debug APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
