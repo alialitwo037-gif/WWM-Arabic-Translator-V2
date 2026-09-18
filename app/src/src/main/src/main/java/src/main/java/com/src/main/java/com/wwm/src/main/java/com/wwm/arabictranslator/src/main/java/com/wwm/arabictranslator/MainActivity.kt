@@ -20,13 +20,15 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         
-        // 1. تهيئة الذاكرة والواجهة أولاً بآمان
-        memory=TranslationMemory(this)
-        glossary=Glossary(this)
-        settings=TranslatorSettings(this)
-        buildUi()
+        try {
+            memory=TranslationMemory(this)
+            glossary=Glossary(this)
+            settings=TranslatorSettings(this)
+            buildUi()
+        } catch(e: Exception) {
+            e.printStackTrace()
+        }
 
-        // 2. طلب إذن الإشعارات بآمان بعد فتح الشاشة
         try {
             if(android.os.Build.VERSION.SDK_INT>=33) {
                 requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),9001)
@@ -52,10 +54,22 @@ class MainActivity : Activity() {
         root.addView(button("⑧ استيراد / تصدير ذاكرة الترجمة"){showBackup()},lp())
         root.addView(button("⑨ دليل بصري لنسخة الموبايل"){showGuide()},lp())
         root.addView(button("⑩ 📖 دليل الاستخدام الكامل"){showFullGuide()},lp())
-        root.addView(button("🧠 WWM AI — مساعد اللعبة"){ WwmAiAssistant(this).show() },lp())
+        root.addView(button("🧠 WWM AI — مساعد اللعبة"){ launchAiAssistant() },lp())
         root.addView(button("إيقاف الترجمة"){stopService(Intent(this,ScreenTranslateService::class.java))},lp())
         root.addView(button("مسح ذاكرة الترجمة"){confirmClearMemory()},lp())
         updateStatus();setContentView(scroll)
+    }
+
+    private fun launchAiAssistant(){
+        try {
+            val clazz = Class.forName("com.wwm.arabictranslator.WwmAiAssistant")
+            val constructor = clazz.getConstructor(Context::class.java)
+            val instance = constructor.newInstance(this)
+            val method = clazz.getMethod("show")
+            method.invoke(instance)
+        } catch(e: Exception) {
+            Toast.makeText(this, "مساعد AI غير متاح حالياً", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showSettings(){
