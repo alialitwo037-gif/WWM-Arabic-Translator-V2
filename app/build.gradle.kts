@@ -24,13 +24,24 @@ android {
             )
         }
     }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     
-    // ML Kit dependencies
+    // ML Kit Text Recognition via Play Services
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    
+    // ML Kit Translation
     implementation("com.google.mlkit:translate:17.0.3")
 }
