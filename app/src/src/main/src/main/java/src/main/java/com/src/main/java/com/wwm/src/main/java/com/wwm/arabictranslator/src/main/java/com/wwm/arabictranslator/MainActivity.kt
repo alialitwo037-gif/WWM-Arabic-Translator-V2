@@ -17,7 +17,23 @@ class MainActivity : Activity() {
     companion object { private const val REQ_CAPTURE=7001; private const val REQ_ZONE_CAPTURE=7002; private const val REQ_EXPORT=7101; private const val REQ_IMPORT=7102 }
     private lateinit var memory:TranslationMemory; private lateinit var glossary:Glossary; private lateinit var settings:TranslatorSettings; private lateinit var status:TextView
 
-    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);if(android.os.Build.VERSION.SDK_INT>=33)requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),9001);memory=TranslationMemory(this);glossary=Glossary(this);settings=TranslatorSettings(this);buildUi()}
+    override fun onCreate(savedInstanceState:Bundle?){
+        super.onCreate(savedInstanceState)
+        
+        // 1. تهيئة الذاكرة والواجهة أولاً بآمان
+        memory=TranslationMemory(this)
+        glossary=Glossary(this)
+        settings=TranslatorSettings(this)
+        buildUi()
+
+        // 2. طلب إذن الإشعارات بآمان بعد فتح الشاشة
+        try {
+            if(android.os.Build.VERSION.SDK_INT>=33) {
+                requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),9001)
+            }
+        } catch(e: Exception) { e.printStackTrace() }
+    }
+
     override fun onResume(){super.onResume();if(::status.isInitialized)updateStatus()}
 
     private fun buildUi(){
