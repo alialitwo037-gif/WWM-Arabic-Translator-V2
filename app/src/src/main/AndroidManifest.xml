@@ -1,26 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- الصلاحيات الأساسية المطلوبة للترجمة والإشعارات والظهور فوق التطبيقات -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <application
         android:allowBackup="true"
-        android:icon="@android:drawable/sym_def_app_icon"
-        android:label="WWM Arabic Translator"
+        android:icon="@mipmap/ic_launcher"
+        android:label="WWM Translator"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
 
-        <!-- تنزيل نموذج الـ OCR تلقائياً عند التثبيت يمنع الـ Crash -->
-        <meta-data
-            android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="ocr" />
-        
-        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -30,13 +20,5 @@
             </intent-filter>
         </activity>
 
-        <!-- خدمة التقاط الشاشة والترجمة في الخلفية -->
-        <service
-            android:name=".ScreenTranslateService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
-
     </application>
-
 </manifest>
