@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.wwm.arabictranslator"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.wwm.arabictranslator"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 14
-        versionName = "1.4"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
     }
 
     buildTypes {
@@ -26,22 +26,16 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "1.8"
     }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    
-    // ML Kit Text Recognition via Play Services
-    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
-    
-    // ML Kit Translation
-    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
 }
